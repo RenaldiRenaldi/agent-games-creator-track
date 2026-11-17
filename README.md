@@ -22,6 +22,16 @@ The launch used the agent's own Solana wallet. The cost was about 0.018 SOL, pai
 
 Each claim the build produced got checked against a source that is not the agent's own word:
 
+```mermaid
+flowchart LR
+    A[Claim<br/>agent says it] --> B{Check 1<br/>Cost?}
+    B -->|Solana RPC<br/>balance before/after| C{Check 2<br/>Creator + window?}
+    C -->|getTransaction<br/>fee payer + block time| D{Check 3<br/>Metadata exact?}
+    D -->|fetch + read back<br/>before creating| E{Check 4<br/>Entry submitted?}
+    E -->|make.fun API<br/>status + list| F{Check 5<br/>No copy of<br/>judge example?}
+    F -->|read the kit<br/>before building| G[Verified<br/>from independent<br/>sources]
+```
+
 **1. "The launch cost ~0.018 SOL."**
 Before the launch, the agent wallet held 0.027903803 SOL (read from a Solana RPC node). After the launch it held 0.008625623 SOL. The launch itself cost 0.01779256 SOL, plus about 0.00149 SOL for metadata hosting. The arithmetic closes. The balance was read twice, from the chain, not from the launch script's output.
 
@@ -36,6 +46,18 @@ The submission was confirmed twice through make.fun's own API: the status endpoi
 
 **5. "We didn't copy the judge's own examples."**
 This one was checked before the build, not after. The competition kit ships the judge's calibration coins — including a "Bounty Bot, $BOUNTY" that the judge itself uses as its strong example. My first concept was literally that name. Reading the kit caught the collision before anything was launched, and the concept was changed to Bounty Hound. A check that happens too late is not a check.
+
+## How the checks were done (technical notes)
+
+For readers who want to reproduce them, here is the method behind each check — no step trusts the build session's own output:
+
+- **Balances (Check 1):** `getBalance` on the agent wallet `9XAmKVSK...` via a public Solana RPC endpoint, called twice — once before the launch, once after. The difference is the cost. The launch script's own log was never used as the source; the chain was.
+- **Creator + window (Check 2):** `getTransaction` on the create signature, with `maxSupportedTransactionVersion: 0`. The fields read were `feePayer` (must equal the agent wallet), `err` (must be null), `blockTime` (must be after the 13:00 WIB opening), and `postTokenBalances` (must contain the new mint). Any one of those failing would have voided the claim.
+- **Metadata (Check 3):** the metadata JSON was fetched from its hosting URL and read back field by field *before* the coin was created, then compared against the competition's house checks (description contains the full bounty URL, website exactly `https://make.fun/bounty/makefun-coin-promo-01`, mint and create signature match). The upload script's success message was not trusted.
+- **Submission (Check 4):** two independent reads of make.fun's own API — the status endpoint (stage `submitted`) and the competition submissions list (entry under handle `renaldi`, title "Bounty Hound"). The local check suite passed 13/0, but the API reads are what confirmed it.
+- **Originality (Check 5):** the competition kit was downloaded and read before any concept was locked in. The judge's calibration coins are in the kit; the collision with "Bounty Bot, $BOUNTY" was found by reading, not by guessing.
+
+The pattern is the same in every check: **the claim, the independent source, and the exact field that would falsify it.** A check without a falsifying field is just a second opinion.
 
 ## Verification is necessary, not sufficient
 
